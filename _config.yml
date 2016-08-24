@@ -14,7 +14,7 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 title: The Core Facility of Bioinformatics' Blog!
-email: imb-cf-bioinformatics@imb-mainz.de
+email: imb-cf-bioinformatics (at) imb-mainz.de
 description: > # this means to ignore newlines until "baseurl:"
   This blog contains our thoughts and discoveries, and serves as a whiteboard
   to the outside world.
@@ -22,6 +22,6 @@ baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://imbforge.github.io" # the base hostname & protocol for your site
 github_username:  imbforge
 
-# Build settings
+# Build settings. More themes found at http://jekyllthemes.org/
 markdown: kramdown
 theme: minima
