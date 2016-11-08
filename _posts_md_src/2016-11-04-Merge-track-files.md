@@ -4,7 +4,7 @@
 
 Generating a single track summarizing NGS coverage from several replicates is a common request among scientists.
 
-Usually, the scientist will be happy if the bioinformatician just merges together the *coverage per million* **normalized** tracks. This is a trivial task handled with the tools from the guys of the (https://genome.ucsc.edu/util.html UCSC Genome Bioinformatics Group) \(aka the kent utilities\).
+Usually, the scientist will be happy if the bioinformatician just merges together the *coverage per million* **normalized** tracks. This is a trivial task handled with the tools from the guys of the UCSC Genome Bioinformatics Group (aka [*the kent utilities*](https://genome.ucsc.edu/util.html)).
 
 All the magic is done with the `bigWigMerge` tool, which puts together the signal from the several bigwig tracks, (bedGraph output), to be eventually converted back to bigwig with the `bedGraphToBigWig` tool. The *trick* here is to divide to amount of signal in each position by the number of replicates. Something like this will do the job:
 
@@ -19,8 +19,8 @@ Chromosome sizes can be retrieved from the UCSC Genome Browser tools with the to
 
 ### Requirements
 
-* `bedGraphToBigWig` from the UCSC Genome Browser tools.
-* the cromosome sizes, which can be retrieved from the UCSC Genome Browser tools with the fetchChromSizes. Alternatively, `samtools idxstats sample.bam | cut -f1-2 > ./chr.sizes`.
+* `bedGraphToBigWig` from the [kent utilities](https://genome.ucsc.edu/util.html).
+* the cromosome sizes, which can be retrieved from the UCSC Genome Browser tools with the fetchChromSizes. Alternatively, `samtools idxstats sample1.bam | cut -f1-2 > ./chr.sizes`.
 
 ### Source
 
@@ -64,7 +64,7 @@ The main basic thing to consider is avoid overrepresentation of any library over
 
 ### Requirements
 
-* `samtools`.
+* [samtools](http://www.htslib.org/)
 
 ### Source
 
@@ -72,9 +72,9 @@ The following script loops over serveral samples defined in a array, and identif
 
 ```bash
 #!/bin/bash
-SAMTOOLS=/fsimb/groups/imb-bioinfocf/common-tools/dependencies/samtools/1.3/samtools
-INPUTDIR=/fsimb/groups/imb-bioinfocf/projects/jgu/jgu_berger_2016_01_kaiser_RNA-Seq/with_UMIs/mapped
-SAMPLES=(jgu_berger_2016_01_??_WT_0_2h jgu_berger_2016_01_??_WT_24h jgu_berger_2016_01_??_ERC)
+SAMTOOLS=/opt/samtools/1.3/samtools
+INPUTDIR=/project/mapped
+SAMPLES=(sample1_?? sample2_?? sample3??)
 SEED=666
 
 cd $INPUTDIR

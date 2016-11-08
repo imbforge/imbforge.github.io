@@ -124,7 +124,7 @@ $(document).ready(function () {
 <div id="bigwig-tracks" class="section level2">
 <h2>bigWig tracks</h2>
 <p>Generating a single track summarizing NGS coverage from several replicates is a common request among scientists.</p>
-<p>Usually, the scientist will be happy if the bioinformatician just merges together the <em>coverage per million</em> <strong>normalized</strong> tracks. This is a trivial task handled with the tools from the guys of the (<a href="https://genome.ucsc.edu/util.html" class="uri">https://genome.ucsc.edu/util.html</a> UCSC Genome Bioinformatics Group) <span class="math inline">\(aka the kent utilities\)</span>.</p>
+<p>Usually, the scientist will be happy if the bioinformatician just merges together the <em>coverage per million</em> <strong>normalized</strong> tracks. This is a trivial task handled with the tools from the guys of the UCSC Genome Bioinformatics Group (aka <a href="https://genome.ucsc.edu/util.html"><em>the kent utilities</em></a>).</p>
 <p>All the magic is done with the <code>bigWigMerge</code> tool, which puts together the signal from the several bigwig tracks, (bedGraph output), to be eventually converted back to bigwig with the <code>bedGraphToBigWig</code> tool. The <em>trick</em> here is to divide to amount of signal in each position by the number of replicates. Something like this will do the job:</p>
 <pre class="bash"><code>bigWigMerge sample1_rep1.bw sample1_rep2.bw sample1_rep3.bw stdout \
     | awk -v NORM=1/3 '$4=(NORM)*$4' \
@@ -134,8 +134,8 @@ bedGraphToBigWig sample1.bed chr.sizes sample1.bw &amp;&amp; rm sample1.bed</cod
 <div id="requirements" class="section level3">
 <h3>Requirements</h3>
 <ul>
-<li><code>bedGraphToBigWig</code> from the UCSC Genome Browser tools.</li>
-<li>the cromosome sizes, which can be retrieved from the UCSC Genome Browser tools with the fetchChromSizes. Alternatively, <code>samtools idxstats sample.bam | cut -f1-2 &gt; ./chr.sizes</code>.</li>
+<li><code>bedGraphToBigWig</code> from the <a href="https://genome.ucsc.edu/util.html">kent utilities</a>.</li>
+<li>the cromosome sizes, which can be retrieved from the UCSC Genome Browser tools with the fetchChromSizes. Alternatively, <code>samtools idxstats sample1.bam | cut -f1-2 &gt; ./chr.sizes</code>.</li>
 </ul>
 </div>
 <div id="source" class="section level3">
@@ -179,16 +179,16 @@ done</code></pre>
 <div id="requirements-1" class="section level3">
 <h3>Requirements</h3>
 <ul>
-<li><code>samtools</code>.</li>
+<li><a href="http://www.htslib.org/">samtools</a></li>
 </ul>
 </div>
 <div id="source-1" class="section level3">
 <h3>Source</h3>
 <p>The following script loops over serveral samples defined in a array, and identifies the replicates assuming they follow a pattern (matched by the ?? wildcards):</p>
 <pre class="bash"><code>#!/bin/bash
-SAMTOOLS=/fsimb/groups/imb-bioinfocf/common-tools/dependencies/samtools/1.3/samtools
-INPUTDIR=/fsimb/groups/imb-bioinfocf/projects/jgu/jgu_berger_2016_01_kaiser_RNA-Seq/with_UMIs/mapped
-SAMPLES=(jgu_berger_2016_01_??_WT_0_2h jgu_berger_2016_01_??_WT_24h jgu_berger_2016_01_??_ERC)
+SAMTOOLS=/opt/samtools/1.3/samtools
+INPUTDIR=/project/mapped
+SAMPLES=(sample1_?? sample2_?? sample3??)
 SEED=666
 
 cd $INPUTDIR
