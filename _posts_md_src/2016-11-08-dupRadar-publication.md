@@ -1,8 +1,8 @@
 # dupRadar publication
 
-The manuscript describing the [bioConductor](http://bioconductor.org) package [dupRadar]( http://bioconductor.org/packages/dupRadar/) has been accepted to BMC Bioinformatics and is ( "available online") for open access.
+The manuscript describing the [bioConductor](http://bioconductor.org) package [dupRadar]( http://bioconductor.org/packages/dupRadar/) has been accepted to BMC Bioinformatics and is [available online](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1276-2) with open access.
 
-*dupradar* is a software to distinguish the fraction of reads originating in natural duplication due to high expression from the fraction induced by artefacts.
+*dupRadar* is a software to distinguish the fraction of reads originating in natural duplication due to high expression from the fraction induced by artefacts.
 
 <p align="center">
   <img src="figures/2016-11-08-dupRadar-publication_fig1.gif" alt=""/>
