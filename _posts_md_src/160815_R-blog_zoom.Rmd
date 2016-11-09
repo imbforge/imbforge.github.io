@@ -1,0 +1,114 @@
+---
+title: "Zoom your data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(knitr)
+library(grid)
+library(gridExtra)
+
+```
+
+R is used a lot to not only analyse your data but also illustrate the results by plotting. A popular package to produce nice looking graphics is ggplot2. In addition to deal with the general graphic representation the plotting routine will also check the necessary dimensions of the plot to fit your data completely. In some cases you may not like this behaviour and want to zoom in to a certain region. R's basic plotting system and ggplot2 provide three different methods to perform this operation, but some caution is needed in selecting the right method.
+
+The three methods are:
+
+* xlim() & ylim()
+* scale_x_...(limits=) & scale_y_...(limits=)
+* coord_cartesian(ylim= & xlim=)
+
+Lets plot some discrete data as a bar plot:
+
+``` {r complete_bar_plot} 
+    your.data <- data.frame(count_data = sample(seq(9), 100, replace=T))
+
+    ggplot(your.data, aes(count_data)) + geom_bar(aes(text=count_data))
+```
+
+As you can see the geom_bar() will count the occurences of each element in the vector and use the elements as x-axis labels and will plot the counts as y-values.
+
+Furthermore assume you want to limit the plotted data to a range from 2 to 8, which could be done with either of the mentioned methods without impacting the plotting result too much.
+
+
+``` {r subsect_bar_show, warning=F, echo=T, eval=F}
+    
+    ggplot(your.data, aes(count_data)) + geom_bar() + 
+        xlim(c(2,8))
+    
+    ggplot(your.data, aes(count_data)) + geom_bar() + 
+        scale_x_continuous(limits=c(2,8))
+    
+    ggplot(your.data, aes(count_data)) + geom_bar() + 
+        coord_cartesian(xlim=c(2,8))
+    
+```
+
+
+``` {r subsect_bar_plot, warning=F, echo=F, fig.height=4, fig.width=12}
+    
+    p.lim <- ggplot(your.data, aes(count_data)) + geom_bar() + 
+        xlim(c(2,8)) + ggtitle("xlim")
+    
+    p.scale <- ggplot(your.data, aes(count_data)) + geom_bar() + 
+        scale_x_continuous(limits=c(2,8)) + ggtitle("scale x")
+    
+    p.coord <- ggplot(your.data, aes(count_data)) + geom_bar() + 
+        coord_cartesian(xlim=c(2,8)) + ggtitle("coord cartesian")
+    
+    
+    grid.arrange(p.lim, p.scale, p.coord, nrow=1, ncol=3)
+```
+
+The three methods exert quite distinguishable effects on the plot. The first two methods will exclude all categories with 2 or less and 8 or more. The last method excludes everything from the plot that is outside the given boundaries. 
+
+Let's ignore this apparent different behaviour for now and move on to another plot. This time we choose a density plot.
+
+``` {r complete_density_plot} 
+    # fill="#777777" & linetype=0 are just added to make the plot look better
+    ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0)
+```
+
+The geom_density() layer will count the data as well, but depicts the probability of a certain category to appear. 
+
+Now lets go back to our tries to limit the view on maybe something special you\'re interested in, i.e categories from 2 to 8. 
+
+``` {r subsect_density_show_same_y, warning=F, echo=T, eval=F}
+    
+    # fill="#777777" & linetype=0 are just added to make the plots look a bit nicer
+    ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        xlim(c(2,8))
+    
+    ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        scale_x_continuous(limits=c(2,8))
+    
+    ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        coord_cartesian(xlim=c(2,8))
+    
+```
+
+``` {r subsect_density_plot_same_y, warning=F, echo=F, fig.height=4, fig.width=12}
+    p.lim <- ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        xlim(c(2,8)) + ggtitle("xlim")
+    
+    p.scale <- ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        scale_x_continuous(limits=c(2,8)) + ggtitle("scale x")
+    
+    p.coord <- ggplot(your.data, aes(count_data)) + geom_density(fill="#777777", linetype=0) + 
+        coord_cartesian(xlim=c(2,8)) + ggtitle("coord cartesian")
+    
+    
+    grid.arrange(p.lim, p.scale, p.coord, nrow=1, ncol=3)
+```
+
+Behold! Quite subetly but present there\'s a difference in the plots (y-values and curve\'s shape). Again the first two plots are the same, but the third differs. What\'s correct and what\'s not?
+
+
+In this case it\'s the minority report, which is correct 
+
+While the first two methods **omit the data** again as they did for the geom\_bar plot without any major impact they do so now as well. But now geom\_density() calculates the counts and probabilities on the limited data. Hence the probabilities do not mirror your data any more. On the contrary the third method, i.e. coord_cartesian(), just limits the region of the x-axis and **literally zooms in** to the density plot. This leads to a correct plot of probalities of occurence of the categories in your data.
+
+So always keep an eye open, if your plotting function changes the input data (xlim and scale_x_...) or just modifies the plot (coord_cartesian) and leaves the input data alone. 
+
