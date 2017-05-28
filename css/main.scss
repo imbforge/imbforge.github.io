@@ -37,3 +37,15 @@ $on-laptop:        800px;
 
 // Import partials from the `minima` theme.
 @import "minima";
+
+// define a few formats
+
+div.caption {
+    font-size:0.85em;
+    margin-bottom:10px;
+}
+
+div.captionheader {
+    font-size:0.85em;
+    font-weight: bold;
+}
