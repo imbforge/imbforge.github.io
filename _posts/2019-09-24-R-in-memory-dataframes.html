@@ -1,0 +1,87 @@
+<h1 id="data.frames-on-steroids">data.frames on steroids</h1>
+<h3 id="some-background">Some background</h3>
+<p>Some days ago landed on my desk a request to identify bidirectional promoters and plot the signal of an NGS experiment around these promoters.</p>
+<p>We were interested in identifying gene pairs following one of these conformations (classes):</p>
+<pre><code>A) head-head (A1: divergent, A2: convergent, A3: same strand)
+  1)         +---&gt;        2)       +---&gt;            3)   +---&gt;
+   ----------+----------   --------+-------------        | +---&gt;
+   --------+------------   ----------+-----------      --+-+------ ... -----------
+       &lt;---+                     &lt;---+                 ----------- ... ------+-+--
+                                                                         &lt;---+ |
+                                                                           &lt;---+
+B) tail-head
+    +---&gt; +---&gt;
+   -+-----+----- ... -------------
+   ------------- ... -----+-----+-
+                      &lt;---+ &lt;---+
+C) tail-tail
+      +---&gt;
+   ---+-----------
+   -----------+---
+          &lt;---+</code></pre>
+<p>One can certainly find lists with bidirectional promoters as supplementary of some manuscripts, but I had some reservations in using those lists: * some were outdated, or not available anymore * I was interested in the most common isoform of a gene only, and wanted to use a modern annotation of that (see <a href="http://appris.bioinfo.cnio.es/">APPRIS</a> and <a href="https://ncbiinsights.ncbi.nlm.nih.gov/2019/03/12/mane-select-v0-5/">MANE Select</a>) * I needed custom types of bidirectionality, involving also the 3' end (see classes B and C)</p>
+<p>For these reasons I needed to calculate them from scratch.</p>
+<h3 id="getting-the-list-of-transcripts">Getting the list of transcripts</h3>
+<p>Getting the most abundant isoform is worth another post (and out of scope here). Oversimplifying a bit, get from BiomaRt a table with gene and transcript name, and genomic coordinates of all genes. Then filter out those non-PRINCIPAL isoforms annotated in APPRIS.</p>
+<h3 id="getting-the-list-of-bidirectional-pairs-of-genes">Getting the list of bidirectional pairs of genes</h3>
+<p>There's several ways one can code something like this. The question is how to do this quickly, in terms of coding and execution time.</p>
+<p>First though was using the fantastic <a href="https://www.bioconductor.org/packages/release/bioc/html/GenomicRanges.html">GenomicRanges</a> package from Bioconductor. It has plenty of methods to work with genomic coordinates. The main drawback is that I'm not very fluent with GenomicRanges, and after gathering all my knowledge and going throught the vignette, I didn't identify a simple way to do this. Same with the <em>tidyverse</em> verbs, as you may suggest.</p>
+<p>I won't extend any further regarding other possible ways to do this (BEDtools?). Just on the aim of this post: R data.frames (plus a bit of help from SQL).</p>
+<p>Keep in mind the starting point is tabulated data from BiomaRt, that's been crossed and filtered with data from APPRIS. This part is done within R, therefore we now have a data.frame containing all principal isoforms + coordinates. We can start writing some coordinate arithmetic within <code>[]</code> to get the bidirectional pairs, but that would be <em>insanely slow</em>. Also, we could try to figure out how to do it with <em>GenomicRanges</em>, the <em>tidyverse</em> or export the table from R and process it somewhere else (like <em>BEDtools</em> or <em>SQLite</em>).</p>
+<p>Hmmm, <em>SQLite</em>! Writing such query in a relational database would be trivial, and the database backend fast as lightning. The idea of the cartesian product behind relational databases (each row in the first table is paired with all the rows in the second table) perfectly matches our problem. We can even have indexes which would speedup the search if needed.</p>
+<p>Now, let's do it all without exiting R, nor exporting anything out of it. Simply <em>upgrading</em> our good old data.frame into a fully fledged table in an perishable (in-memory) database.</p>
+<h4 id="geting-stuff-from-biomart-and-appris">Geting stuff from BiomaRt and APPRIS</h4>
+<p>Let's get all principal isoforms from BiomaRt and APPRIS:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">appris &lt;-<span class="st"> </span><span class="kw">read.delim</span>(<span class="st">&quot;http://apprisws.bioinfo.cnio.es/pub/current_release/datafiles/homo_sapiens/GRCh37/appris_data.principal.txt&quot;</span>, <span class="dt">head=</span><span class="ot">FALSE</span>)
+regions  &lt;-<span class="st"> </span><span class="kw">getBM</span>(<span class="dt">attributes=</span><span class="kw">c</span>(<span class="st">&quot;ensembl_gene_id&quot;</span>, <span class="st">&quot;ensembl_transcript_id&quot;</span>, <span class="st">&quot;external_gene_name&quot;</span>, <span class="st">&quot;chromosome_name&quot;</span>,
+                               <span class="st">&quot;transcript_gencode_basic&quot;</span>, <span class="st">&quot;transcript_start&quot;</span>, <span class="st">&quot;transcript_end&quot;</span>, <span class="st">&quot;strand&quot;</span>),
+                  <span class="dt">filters=</span><span class="st">&quot;ensembl_transcript_id&quot;</span>,
+                  <span class="dt">values=</span>appris<span class="op">$</span>V3[appris<span class="op">$</span>V5 <span class="op">==</span><span class="st"> &quot;PRINCIPAL:1&quot;</span>],
+                  <span class="dt">mart=</span><span class="kw">useDataset</span>(<span class="st">&quot;hsapiens_gene_ensembl&quot;</span>, <span class="kw">useMart</span>(<span class="st">&quot;ENSEMBL_MART_ENSEMBL&quot;</span>, <span class="dt">host=</span><span class="st">&quot;grch37.ensembl.org&quot;</span>)))
+regions<span class="op">$</span>tss &lt;-<span class="st"> </span><span class="kw">ifelse</span>(regions<span class="op">$</span>strand <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>, regions<span class="op">$</span>transcript_start, regions<span class="op">$</span>transcript_end)  <span class="co"># Biomart encodes &#39;+&#39; as 1 and &#39;-&#39; as -1</span></code></pre></div>
+<h4 id="write-this-stuff-to-an-in-memory-db-to-do-quick-and-simple-cartesian-products">Write this stuff to an in-memory db, to do quick and simple cartesian products</h4>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(DBI)
+db &lt;-<span class="st"> </span><span class="kw">dbConnect</span>(RSQLite<span class="op">::</span><span class="kw">SQLite</span>(), <span class="st">&quot;:memory:&quot;</span>)  <span class="co"># create an ephemeral in-memory RSQLite database</span>
+<span class="kw">dbWriteTable</span>(db, <span class="st">&quot;regions&quot;</span>, regions)            <span class="co"># create a table with the same structure and contents as in the data.frame</span></code></pre></div>
+<h4 id="get-the-bidirectional-pairs">Get the bidirectional pairs</h4>
+<p>The SQL query is damned simple and as explicit as English: get all gene pairs on the same chromosome, different gene_id, different strand, which the distance between TSSes is less than 1000bp.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">query &lt;-<span class="st"> </span><span class="kw">paste</span>(<span class="st">&quot;SELECT *&quot;</span>,
+               <span class="st">&quot;  FROM regions AS gene1, regions AS gene2&quot;</span>,
+               <span class="st">&quot; WHERE gene1.chromosome_name = gene2.chromosome_name&quot;</span>,
+               <span class="st">&quot;   AND gene1.ensembl_gene_id &lt;&gt; gene2.ensembl_gene_id&quot;</span>,
+               <span class="st">&quot;   AND gene1.strand &lt;&gt; gene2.strand&quot;</span>,
+               <span class="st">&quot;   AND ABS(gene1.tss - gene2.tss) &lt; 1000&quot;</span>)
+
+bidirectional &lt;-<span class="st"> </span><span class="kw">dbGetQuery</span>(db, query)
+<span class="kw">colnames</span>(bidirectional) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="kw">paste0</span>(<span class="kw">colnames</span>(regions), <span class="st">&quot;.gene1&quot;</span>),
+                             <span class="kw">paste0</span>(<span class="kw">colnames</span>(regions), <span class="st">&quot;.gene2&quot;</span>))
+<span class="kw">write.csv</span>(bidirectional, <span class="dt">file=</span><span class="st">&quot;bidirectional_promoters.csv&quot;</span>, <span class="dt">row.names=</span><span class="ot">FALSE</span>)</code></pre></div>
+<p><em>Et voila!</em> less than 10 seconds to run.</p>
+<h3 id="conclusions">Conclusions</h3>
+<p><em>in-memory</em> relational databases are great for doing some complex operations in basic data.frames (tabulated with simple datatypes), which otherwise would be slow or impossible to write. They're also simple and quick to construct within R from a data.frame. SQL is also a standard query language, turing complete and well understood. Therefore, data.frames converted into relational tables represent a powerful tool for many common problems in genomics.</p>
+<h3 id="addendum">Addendum</h3>
+<p>No indexes are created with <code>dbWriteTable()</code>. That could have a noticeable performance issues with very big data.frames or intensive queries.</p>
+<p>For instance:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(DBI)
+db &lt;-<span class="st"> </span><span class="kw">dbConnect</span>(RSQLite<span class="op">::</span><span class="kw">SQLite</span>(), <span class="st">&quot;:memory:&quot;</span>)
+<span class="kw">dbWriteTable</span>(db, <span class="st">&quot;mtcars&quot;</span>, mtcars)
+<span class="kw">head</span>(<span class="kw">dbReadTable</span>(db, <span class="st">&quot;mtcars&quot;</span>))
+<span class="co">#    mpg cyl disp  hp drat    wt  qsec vs am gear carb</span>
+<span class="co"># 1 21.0   6  160 110 3.90 2.620 16.46  0  1    4    4</span>
+<span class="co"># 2 21.0   6  160 110 3.90 2.875 17.02  0  1    4    4</span>
+<span class="co"># 3 22.8   4  108  93 3.85 2.320 18.61  1  1    4    1</span>
+<span class="co"># 4 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1</span>
+<span class="co"># 5 18.7   8  360 175 3.15 3.440 17.02  0  0    3    2</span>
+<span class="co"># 6 18.1   6  225 105 2.76 3.460 20.22  1  0    3    1</span></code></pre></div>
+<p>To get the <em>path</em> that the DBMS will follow with a simple <code>WHERE</code> clause:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">dbGetQuery</span>(db, <span class="st">&quot;EXPLAIN QUERY PLAN SELECT COUNT(*) FROM mtcars WHERE mpg &lt; 20&quot;</span>)
+<span class="co">#   id parent notused            detail</span>
+<span class="co"># 1  3      0       0 SCAN TABLE mtcars   &lt;-- it&#39;s going to crawl through whole the table!</span></code></pre></div>
+<p><em>SCAN TABLE is bad</em>.</p>
+<p>So let's create an index on the <code>WHERE</code> group:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">dbExecute</span>(db, <span class="st">&quot;CREATE INDEX idx_mpg ON mtcars(mpg)&quot;</span>)
+<span class="co"># [1] 0</span>
+<span class="kw">dbGetQuery</span>(db, <span class="st">&quot;EXPLAIN QUERY PLAN SELECT COUNT(*) FROM mtcars WHERE mpg &lt; 20&quot;</span>)
+<span class="co">#   id parent notused                                                    detail</span>
+<span class="co"># 1  3      0       0 SEARCH TABLE mtcars USING COVERING INDEX idx_mpg (mpg&lt;?)</span></code></pre></div>
+<p><em>SEARCH TABLE is good</em>. This means it avoids going through the whole table, just the rows it knows mpg is below 20 (extrapolate it to a table with milions of rows where only few rows have mpg below 20).</p>

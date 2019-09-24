@@ -6,9 +6,106 @@
 </description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Tue, 24 Sep 2019 23:31:45 +0200</pubDate>
-    <lastBuildDate>Tue, 24 Sep 2019 23:31:45 +0200</lastBuildDate>
+    <pubDate>Tue, 24 Sep 2019 23:45:36 +0200</pubDate>
+    <lastBuildDate>Tue, 24 Sep 2019 23:45:36 +0200</lastBuildDate>
     <generator>Jekyll v3.8.5</generator>
+    
+      <item>
+        <title>R In Memory Dataframes</title>
+        <description>&lt;h1 id=&quot;data.frames-on-steroids&quot;&gt;data.frames on steroids&lt;/h1&gt;
+&lt;h3 id=&quot;some-background&quot;&gt;Some background&lt;/h3&gt;
+&lt;p&gt;Some days ago landed on my desk a request to identify bidirectional promoters and plot the signal of an NGS experiment around these promoters.&lt;/p&gt;
+&lt;p&gt;We were interested in identifying gene pairs following one of these conformations (classes):&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;A) head-head (A1: divergent, A2: convergent, A3: same strand)
+  1)         +---&amp;gt;        2)       +---&amp;gt;            3)   +---&amp;gt;
+   ----------+----------   --------+-------------        | +---&amp;gt;
+   --------+------------   ----------+-----------      --+-+------ ... -----------
+       &amp;lt;---+                     &amp;lt;---+                 ----------- ... ------+-+--
+                                                                         &amp;lt;---+ |
+                                                                           &amp;lt;---+
+B) tail-head
+    +---&amp;gt; +---&amp;gt;
+   -+-----+----- ... -------------
+   ------------- ... -----+-----+-
+                      &amp;lt;---+ &amp;lt;---+
+C) tail-tail
+      +---&amp;gt;
+   ---+-----------
+   -----------+---
+          &amp;lt;---+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;One can certainly find lists with bidirectional promoters as supplementary of some manuscripts, but I had some reservations in using those lists: * some were outdated, or not available anymore * I was interested in the most common isoform of a gene only, and wanted to use a modern annotation of that (see &lt;a href=&quot;http://appris.bioinfo.cnio.es/&quot;&gt;APPRIS&lt;/a&gt; and &lt;a href=&quot;https://ncbiinsights.ncbi.nlm.nih.gov/2019/03/12/mane-select-v0-5/&quot;&gt;MANE Select&lt;/a&gt;) * I needed custom types of bidirectionality, involving also the 3' end (see classes B and C)&lt;/p&gt;
+&lt;p&gt;For these reasons I needed to calculate them from scratch.&lt;/p&gt;
+&lt;h3 id=&quot;getting-the-list-of-transcripts&quot;&gt;Getting the list of transcripts&lt;/h3&gt;
+&lt;p&gt;Getting the most abundant isoform is worth another post (and out of scope here). Oversimplifying a bit, get from BiomaRt a table with gene and transcript name, and genomic coordinates of all genes. Then filter out those non-PRINCIPAL isoforms annotated in APPRIS.&lt;/p&gt;
+&lt;h3 id=&quot;getting-the-list-of-bidirectional-pairs-of-genes&quot;&gt;Getting the list of bidirectional pairs of genes&lt;/h3&gt;
+&lt;p&gt;There's several ways one can code something like this. The question is how to do this quickly, in terms of coding and execution time.&lt;/p&gt;
+&lt;p&gt;First though was using the fantastic &lt;a href=&quot;https://www.bioconductor.org/packages/release/bioc/html/GenomicRanges.html&quot;&gt;GenomicRanges&lt;/a&gt; package from Bioconductor. It has plenty of methods to work with genomic coordinates. The main drawback is that I'm not very fluent with GenomicRanges, and after gathering all my knowledge and going throught the vignette, I didn't identify a simple way to do this. Same with the &lt;em&gt;tidyverse&lt;/em&gt; verbs, as you may suggest.&lt;/p&gt;
+&lt;p&gt;I won't extend any further regarding other possible ways to do this (BEDtools?). Just on the aim of this post: R data.frames (plus a bit of help from SQL).&lt;/p&gt;
+&lt;p&gt;Keep in mind the starting point is tabulated data from BiomaRt, that's been crossed and filtered with data from APPRIS. This part is done within R, therefore we now have a data.frame containing all principal isoforms + coordinates. We can start writing some coordinate arithmetic within &lt;code&gt;[]&lt;/code&gt; to get the bidirectional pairs, but that would be &lt;em&gt;insanely slow&lt;/em&gt;. Also, we could try to figure out how to do it with &lt;em&gt;GenomicRanges&lt;/em&gt;, the &lt;em&gt;tidyverse&lt;/em&gt; or export the table from R and process it somewhere else (like &lt;em&gt;BEDtools&lt;/em&gt; or &lt;em&gt;SQLite&lt;/em&gt;).&lt;/p&gt;
+&lt;p&gt;Hmmm, &lt;em&gt;SQLite&lt;/em&gt;! Writing such query in a relational database would be trivial, and the database backend fast as lightning. The idea of the cartesian product behind relational databases (each row in the first table is paired with all the rows in the second table) perfectly matches our problem. We can even have indexes which would speedup the search if needed.&lt;/p&gt;
+&lt;p&gt;Now, let's do it all without exiting R, nor exporting anything out of it. Simply &lt;em&gt;upgrading&lt;/em&gt; our good old data.frame into a fully fledged table in an perishable (in-memory) database.&lt;/p&gt;
+&lt;h4 id=&quot;geting-stuff-from-biomart-and-appris&quot;&gt;Geting stuff from BiomaRt and APPRIS&lt;/h4&gt;
+&lt;p&gt;Let's get all principal isoforms from BiomaRt and APPRIS:&lt;/p&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;appris &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;read.delim&lt;/span&gt;(&lt;span class=&quot;st&quot;&gt;&amp;quot;http://apprisws.bioinfo.cnio.es/pub/current_release/datafiles/homo_sapiens/GRCh37/appris_data.principal.txt&amp;quot;&lt;/span&gt;, &lt;span class=&quot;dt&quot;&gt;head=&lt;/span&gt;&lt;span class=&quot;ot&quot;&gt;FALSE&lt;/span&gt;)
+regions  &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;getBM&lt;/span&gt;(&lt;span class=&quot;dt&quot;&gt;attributes=&lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;c&lt;/span&gt;(&lt;span class=&quot;st&quot;&gt;&amp;quot;ensembl_gene_id&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;ensembl_transcript_id&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;external_gene_name&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;chromosome_name&amp;quot;&lt;/span&gt;,
+                               &lt;span class=&quot;st&quot;&gt;&amp;quot;transcript_gencode_basic&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;transcript_start&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;transcript_end&amp;quot;&lt;/span&gt;, &lt;span class=&quot;st&quot;&gt;&amp;quot;strand&amp;quot;&lt;/span&gt;),
+                  &lt;span class=&quot;dt&quot;&gt;filters=&lt;/span&gt;&lt;span class=&quot;st&quot;&gt;&amp;quot;ensembl_transcript_id&amp;quot;&lt;/span&gt;,
+                  &lt;span class=&quot;dt&quot;&gt;values=&lt;/span&gt;appris&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;V3[appris&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;V5 &lt;span class=&quot;op&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;st&quot;&gt; &amp;quot;PRINCIPAL:1&amp;quot;&lt;/span&gt;],
+                  &lt;span class=&quot;dt&quot;&gt;mart=&lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;useDataset&lt;/span&gt;(&lt;span class=&quot;st&quot;&gt;&amp;quot;hsapiens_gene_ensembl&amp;quot;&lt;/span&gt;, &lt;span class=&quot;kw&quot;&gt;useMart&lt;/span&gt;(&lt;span class=&quot;st&quot;&gt;&amp;quot;ENSEMBL_MART_ENSEMBL&amp;quot;&lt;/span&gt;, &lt;span class=&quot;dt&quot;&gt;host=&lt;/span&gt;&lt;span class=&quot;st&quot;&gt;&amp;quot;grch37.ensembl.org&amp;quot;&lt;/span&gt;)))
+regions&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;tss &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;ifelse&lt;/span&gt;(regions&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;strand &lt;span class=&quot;op&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;dv&quot;&gt;0&lt;/span&gt;, regions&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;transcript_start, regions&lt;span class=&quot;op&quot;&gt;$&lt;/span&gt;transcript_end)  &lt;span class=&quot;co&quot;&gt;# Biomart encodes &amp;#39;+&amp;#39; as 1 and &amp;#39;-&amp;#39; as -1&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h4 id=&quot;write-this-stuff-to-an-in-memory-db-to-do-quick-and-simple-cartesian-products&quot;&gt;Write this stuff to an in-memory db, to do quick and simple cartesian products&lt;/h4&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;&lt;span class=&quot;kw&quot;&gt;library&lt;/span&gt;(DBI)
+db &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;dbConnect&lt;/span&gt;(RSQLite&lt;span class=&quot;op&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;SQLite&lt;/span&gt;(), &lt;span class=&quot;st&quot;&gt;&amp;quot;:memory:&amp;quot;&lt;/span&gt;)  &lt;span class=&quot;co&quot;&gt;# create an ephemeral in-memory RSQLite database&lt;/span&gt;
+&lt;span class=&quot;kw&quot;&gt;dbWriteTable&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;regions&amp;quot;&lt;/span&gt;, regions)            &lt;span class=&quot;co&quot;&gt;# create a table with the same structure and contents as in the data.frame&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h4 id=&quot;get-the-bidirectional-pairs&quot;&gt;Get the bidirectional pairs&lt;/h4&gt;
+&lt;p&gt;The SQL query is damned simple and as explicit as English: get all gene pairs on the same chromosome, different gene_id, different strand, which the distance between TSSes is less than 1000bp.&lt;/p&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;query &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;paste&lt;/span&gt;(&lt;span class=&quot;st&quot;&gt;&amp;quot;SELECT *&amp;quot;&lt;/span&gt;,
+               &lt;span class=&quot;st&quot;&gt;&amp;quot;  FROM regions AS gene1, regions AS gene2&amp;quot;&lt;/span&gt;,
+               &lt;span class=&quot;st&quot;&gt;&amp;quot; WHERE gene1.chromosome_name = gene2.chromosome_name&amp;quot;&lt;/span&gt;,
+               &lt;span class=&quot;st&quot;&gt;&amp;quot;   AND gene1.ensembl_gene_id &amp;lt;&amp;gt; gene2.ensembl_gene_id&amp;quot;&lt;/span&gt;,
+               &lt;span class=&quot;st&quot;&gt;&amp;quot;   AND gene1.strand &amp;lt;&amp;gt; gene2.strand&amp;quot;&lt;/span&gt;,
+               &lt;span class=&quot;st&quot;&gt;&amp;quot;   AND ABS(gene1.tss - gene2.tss) &amp;lt; 1000&amp;quot;&lt;/span&gt;)
+
+bidirectional &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;dbGetQuery&lt;/span&gt;(db, query)
+&lt;span class=&quot;kw&quot;&gt;colnames&lt;/span&gt;(bidirectional) &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;c&lt;/span&gt;(&lt;span class=&quot;kw&quot;&gt;paste0&lt;/span&gt;(&lt;span class=&quot;kw&quot;&gt;colnames&lt;/span&gt;(regions), &lt;span class=&quot;st&quot;&gt;&amp;quot;.gene1&amp;quot;&lt;/span&gt;),
+                             &lt;span class=&quot;kw&quot;&gt;paste0&lt;/span&gt;(&lt;span class=&quot;kw&quot;&gt;colnames&lt;/span&gt;(regions), &lt;span class=&quot;st&quot;&gt;&amp;quot;.gene2&amp;quot;&lt;/span&gt;))
+&lt;span class=&quot;kw&quot;&gt;write.csv&lt;/span&gt;(bidirectional, &lt;span class=&quot;dt&quot;&gt;file=&lt;/span&gt;&lt;span class=&quot;st&quot;&gt;&amp;quot;bidirectional_promoters.csv&amp;quot;&lt;/span&gt;, &lt;span class=&quot;dt&quot;&gt;row.names=&lt;/span&gt;&lt;span class=&quot;ot&quot;&gt;FALSE&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;em&gt;Et voila!&lt;/em&gt; less than 10 seconds to run.&lt;/p&gt;
+&lt;h3 id=&quot;conclusions&quot;&gt;Conclusions&lt;/h3&gt;
+&lt;p&gt;&lt;em&gt;in-memory&lt;/em&gt; relational databases are great for doing some complex operations in basic data.frames (tabulated with simple datatypes), which otherwise would be slow or impossible to write. They're also simple and quick to construct within R from a data.frame. SQL is also a standard query language, turing complete and well understood. Therefore, data.frames converted into relational tables represent a powerful tool for many common problems in genomics.&lt;/p&gt;
+&lt;h3 id=&quot;addendum&quot;&gt;Addendum&lt;/h3&gt;
+&lt;p&gt;No indexes are created with &lt;code&gt;dbWriteTable()&lt;/code&gt;. That could have a noticeable performance issues with very big data.frames or intensive queries.&lt;/p&gt;
+&lt;p&gt;For instance:&lt;/p&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;&lt;span class=&quot;kw&quot;&gt;library&lt;/span&gt;(DBI)
+db &amp;lt;-&lt;span class=&quot;st&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;dbConnect&lt;/span&gt;(RSQLite&lt;span class=&quot;op&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;kw&quot;&gt;SQLite&lt;/span&gt;(), &lt;span class=&quot;st&quot;&gt;&amp;quot;:memory:&amp;quot;&lt;/span&gt;)
+&lt;span class=&quot;kw&quot;&gt;dbWriteTable&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;mtcars&amp;quot;&lt;/span&gt;, mtcars)
+&lt;span class=&quot;kw&quot;&gt;head&lt;/span&gt;(&lt;span class=&quot;kw&quot;&gt;dbReadTable&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;mtcars&amp;quot;&lt;/span&gt;))
+&lt;span class=&quot;co&quot;&gt;#    mpg cyl disp  hp drat    wt  qsec vs am gear carb&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 1 21.0   6  160 110 3.90 2.620 16.46  0  1    4    4&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 2 21.0   6  160 110 3.90 2.875 17.02  0  1    4    4&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 3 22.8   4  108  93 3.85 2.320 18.61  1  1    4    1&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 4 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 5 18.7   8  360 175 3.15 3.440 17.02  0  0    3    2&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 6 18.1   6  225 105 2.76 3.460 20.22  1  0    3    1&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;To get the &lt;em&gt;path&lt;/em&gt; that the DBMS will follow with a simple &lt;code&gt;WHERE&lt;/code&gt; clause:&lt;/p&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;&lt;span class=&quot;kw&quot;&gt;dbGetQuery&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;EXPLAIN QUERY PLAN SELECT COUNT(*) FROM mtcars WHERE mpg &amp;lt; 20&amp;quot;&lt;/span&gt;)
+&lt;span class=&quot;co&quot;&gt;#   id parent notused            detail&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 1  3      0       0 SCAN TABLE mtcars   &amp;lt;-- it&amp;#39;s going to crawl through whole the table!&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;em&gt;SCAN TABLE is bad&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;So let's create an index on the &lt;code&gt;WHERE&lt;/code&gt; group:&lt;/p&gt;
+&lt;div class=&quot;sourceCode&quot;&gt;&lt;pre class=&quot;sourceCode r&quot;&gt;&lt;code class=&quot;sourceCode r&quot;&gt;&lt;span class=&quot;kw&quot;&gt;dbExecute&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;CREATE INDEX idx_mpg ON mtcars(mpg)&amp;quot;&lt;/span&gt;)
+&lt;span class=&quot;co&quot;&gt;# [1] 0&lt;/span&gt;
+&lt;span class=&quot;kw&quot;&gt;dbGetQuery&lt;/span&gt;(db, &lt;span class=&quot;st&quot;&gt;&amp;quot;EXPLAIN QUERY PLAN SELECT COUNT(*) FROM mtcars WHERE mpg &amp;lt; 20&amp;quot;&lt;/span&gt;)
+&lt;span class=&quot;co&quot;&gt;#   id parent notused                                                    detail&lt;/span&gt;
+&lt;span class=&quot;co&quot;&gt;# 1  3      0       0 SEARCH TABLE mtcars USING COVERING INDEX idx_mpg (mpg&amp;lt;?)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;em&gt;SEARCH TABLE is good&lt;/em&gt;. This means it avoids going through the whole table, just the rows it knows mpg is below 20 (extrapolate it to a table with milions of rows where only few rows have mpg below 20).&lt;/p&gt;
+</description>
+        <pubDate>Tue, 24 Sep 2019 00:00:00 +0200</pubDate>
+        <link>http://localhost:4000/2019/09/24/R-in-memory-dataframes.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2019/09/24/R-in-memory-dataframes.html</guid>
+        
+        
+      </item>
     
       <item>
         <title>Ideograms</title>
