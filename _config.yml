@@ -20,7 +20,7 @@ description: > # this means to ignore newlines until "baseurl:"
   to the outside world.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://imbforge.github.io" # the base hostname & protocol for your site
-github_username:  imbforge
+github_username: imbforge
 
 # Build settings. More themes found at http://jekyllthemes.org/
 markdown: kramdown
