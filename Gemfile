@@ -30,5 +30,6 @@ gem "tzinfo-data", platforms: [:mingw, :mswin, :x64_mingw, :jruby]
 # Performance-booster for watching directories on Windows
 gem "wdm", "~> 0.1.0" if Gem.win_platform?
 
-# some packages depend on nokogiri. This is the latest security patch of nokogiri
+# some packages depend on nokogiri and rubyzip. This is the latest security patch for them
 gem "nokogiri", ">= 1.10.8"
+gem "rubyzip", ">= 1.3.0"
