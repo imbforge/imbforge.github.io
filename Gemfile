@@ -33,3 +33,4 @@ gem "wdm", "~> 0.1.0" if Gem.win_platform?
 # some packages depend on nokogiri and rubyzip. This is the latest security patch for them
 gem "nokogiri", ">= 1.10.8"
 gem "rubyzip", ">= 1.3.0"
+gem "kramdown", ">= 2.3.0"
